@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { Camera, Image, Video, Users, Plus, X, Trash2, Copy, RefreshCw, CheckCircle } from 'lucide-react';
+import { Camera, Image, Video, Users, Plus, X, Trash2, Copy, RefreshCw, CheckCircle, Edit } from 'lucide-react';
 import { 
     storeEventData, 
     getEventStatistics, 
@@ -16,6 +16,7 @@ import { s3Client, S3_BUCKET_NAME } from '../config/aws';
 import { Upload } from '@aws-sdk/lib-storage';
 import { UserContext } from '../App';
 import { storeUserCredentials, getUserByEmail, queryUserByEmail } from '../config/dynamodb';
+import { ObjectCannedACL } from '@aws-sdk/client-s3';
 
 interface Event {
     id: string;
@@ -113,6 +114,10 @@ const EventDashboard = (props: EventDashboardProps) => {
     const [userProfile, setUserProfile] = useState<any>(null);
     const [copiedCode, setCopiedCode] = useState(false);
     const [sortOption, setSortOption] = useState<'name' | 'date'>('date');
+
+    // Add these states near the top of the EventDashboard component
+    const [editMode, setEditMode] = useState<{eventId: string; type: 'name' | 'coverImage'} | null>(null);
+    const [editedName, setEditedName] = useState('');
 
     // Sort events based on selected option
     const sortedEvents = [...events].sort((a, b) => {
@@ -587,6 +592,168 @@ const EventDashboard = (props: EventDashboardProps) => {
         }
     };
 
+    // Add this function in the EventDashboard component
+    const handleUpdateEvent = async (eventId: string, updates: {name?: string; coverImage?: string}) => {
+        try {
+            const userEmail = localStorage.getItem('userEmail');
+            if (!userEmail) {
+                throw new Error('User not authenticated');
+            }
+
+            // Get existing event data
+            const existingEvent = await getEventById(eventId);
+            if (!existingEvent) {
+                throw new Error('Event not found');
+            }
+
+            // If there's a new cover image, upload it to S3
+            let coverImageUrl = updates.coverImage;
+            if (updates.coverImage && updates.coverImage.startsWith('data:')) {
+                const coverImageKey = `events/shared/${eventId}/cover.jpg`;
+                
+                // Convert base64 to buffer
+                const base64Data = updates.coverImage.replace(/^data:image\/\w+;base64,/, '');
+                const buffer = Buffer.from(base64Data, 'base64');
+
+                // Upload to S3
+                const uploadCoverImage = new Upload({
+                    client: s3Client,
+                    params: {
+                        Bucket: S3_BUCKET_NAME,
+                        Key: coverImageKey,
+                        Body: buffer,
+                        ContentType: 'image/jpeg',
+                        ACL: 'public-read'
+                    }
+                });
+
+                await uploadCoverImage.done();
+                coverImageUrl = `https://${S3_BUCKET_NAME}.s3.amazonaws.com/${coverImageKey}`;
+            }
+
+            // Update event data
+            const updatedEvent = {
+                ...existingEvent,
+                ...(updates.name && { name: updates.name }),
+                ...(coverImageUrl && { coverImage: coverImageUrl }),
+                updatedAt: new Date().toISOString()
+            };
+
+            // Store updated event
+            await storeEventData(updatedEvent);
+            
+            // Refresh events list
+            await loadEvents();
+            setEditMode(null);
+            setEditedName('');
+
+        } catch (error) {
+            console.error('Error updating event:', error);
+            alert('Failed to update event. Please try again.');
+        }
+    };
+
+    // Add this function to handle direct file uploads to S3
+    const uploadFileToS3 = async (file: File, key: string): Promise<string> => {
+        try {
+            const upload = new Upload({
+                client: s3Client,
+                params: {
+                    Bucket: S3_BUCKET_NAME,
+                    Key: key,
+                    Body: file,
+                    ContentType: file.type,
+                    ACL: 'public-read'
+                }
+            });
+
+            await upload.done();
+            return `https://${S3_BUCKET_NAME}.s3.amazonaws.com/${key}`;
+        } catch (error) {
+            console.error('Error uploading to S3:', error);
+            throw error;
+        }
+    };
+
+    // Update the handleEditCoverImage function
+    const handleEditCoverImage = async (event: React.ChangeEvent<HTMLInputElement>, eventId: string) => {
+        if (event.target.files && event.target.files[0]) {
+            const file = event.target.files[0];
+            
+            try {
+                // Show loading state
+                setIsLoading(true);
+                
+                // Validate file size
+                if (file.size > MAX_COVER_IMAGE_SIZE) {
+                    alert(`File size exceeds the maximum limit of 500MB`);
+                    return;
+                }
+
+                // Validate file type
+                if (!file.type.startsWith('image/')) {
+                    alert('Please upload a valid image file');
+                    return;
+                }
+
+                // Get existing event first
+                const existingEvent = await getEventById(eventId);
+                if (!existingEvent) {
+                    throw new Error('Event not found');
+                }
+
+                // Create a unique key for the cover image
+                const coverImageKey = `events/${eventId}/cover-${Date.now()}.${file.type.split('/')[1]}`;
+
+                // Create the upload params
+                const uploadParams = {
+                    Bucket: S3_BUCKET_NAME,
+                    Key: coverImageKey,
+                    Body: file,
+                    ContentType: file.type,
+                    ACL: 'public-read' as ObjectCannedACL  // Type assertion to ObjectCannedACL
+                };
+
+                // Upload to S3
+                const upload = new Upload({
+                    client: s3Client,
+                    params: uploadParams
+                });
+
+                await upload.done();
+
+                // Generate the S3 URL
+                const coverImageUrl = `https://${S3_BUCKET_NAME}.s3.amazonaws.com/${coverImageKey}`;
+
+                // Update event with new cover image URL
+                const updatedEvent = {
+                    ...existingEvent,
+                    coverImage: coverImageUrl,
+                    updatedAt: new Date().toISOString()
+                };
+
+                // Store updated event
+                const success = await storeEventData(updatedEvent);
+                
+                if (!success) {
+                    throw new Error('Failed to update event data');
+                }
+
+                // Refresh events list
+                await loadEvents();
+
+                // Show success message
+                alert('Cover image updated successfully');
+
+            } catch (error) {
+                console.error('Error updating cover image:', error);
+                alert('Failed to update cover image. Please try again.');
+            } finally {
+                setIsLoading(false);
+            }
+        }
+    };
+
     return (
         <div className={`relative bg-blue-45 flex flex-col pt-16 sm:pt-16 ${events.length === 0 ? 'h-[calc(100vh-70px)]' : 'min-h-screen'}`}>
             <div className="relative z-10 container mx-auto px-4 py-4 sm:py-6 flex-grow">
@@ -835,17 +1002,81 @@ const EventDashboard = (props: EventDashboardProps) => {
                         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 sm:gap-4">
                             {Array.isArray(events) && sortedEvents.map((event) => (
                                 <div key={event.id} className="bg-gradient-to-br from-white to-blue-50 rounded-lg shadow-md border border-blue-200 overflow-hidden transform hover:scale-102 hover:shadow-lg transition-all duration-200">
-                                    <div className="relative w-full h-24 sm:h-32 bg-white rounded-t-lg overflow-hidden">
-                                        {event.coverImage ? (
-                                            <img src={event.coverImage} alt={event.name} className="w-full h-full object-cover transform hover:scale-110 transition-transform duration-500" />
+                                    {event.coverImage ? (
+                                        <div className="relative w-full h-24 sm:h-32">
+                                            <img 
+                                                src={`${event.coverImage}?t=${Date.now()}`} // Add timestamp to prevent caching
+                                                alt={event.name} 
+                                                className="w-full h-full object-cover transform hover:scale-110 transition-transform duration-500" 
+                                            />
+                                            <label className="absolute bottom-2 right-2 bg-blue-500 text-white p-1.5 rounded-full cursor-pointer hover:bg-blue-600 transition-colors">
+                                                <input
+                                                    type="file"
+                                                    className="hidden"
+                                                    accept="image/*"
+                                                    onChange={(e) => {
+                                                        handleEditCoverImage(e, event.id);
+                                                        e.target.value = ''; // Reset input
+                                                    }}
+                                                    disabled={isLoading}
+                                                />
+                                                {isLoading ? (
+                                                    <RefreshCw className="w-4 h-4 animate-spin" />
+                                                ) : (
+                                                    <Camera className="w-4 h-4" />
+                                                )}
+                                            </label>
+                                        </div>
+                                    ) : (
+                                        <div className="relative w-full h-24 sm:h-32 bg-gradient-to-br from-blue-50 to-blue-100 flex items-center justify-center">
+                                            <label className="cursor-pointer flex items-center justify-center w-full h-full">
+                                                <input
+                                                    type="file"
+                                                    className="hidden"
+                                                    accept="image/*"
+                                                    onChange={(e) => {
+                                                        handleEditCoverImage(e, event.id);
+                                                        e.target.value = ''; // Reset input
+                                                    }}
+                                                    disabled={isLoading}
+                                                />
+                                                {isLoading ? (
+                                                    <RefreshCw className="w-6 h-6 text-blue-400 animate-spin" />
+                                                ) : (
+                                                    <Camera className="w-6 h-6 text-blue-400" />
+                                                )}
+                                            </label>
+                                        </div>
+                                    )}
+                                    <div className="p-2.5">
+                                        {editMode?.eventId === event.id && editMode.type === 'name' ? (
+                                            <form onSubmit={(e) => {
+                                                e.preventDefault();
+                                                handleUpdateEvent(event.id, { name: editedName });
+                                            }}>
+                                                <input
+                                                    type="text"
+                                                    value={editedName}
+                                                    onChange={(e) => setEditedName(e.target.value)}
+                                                    className="w-full px-2 py-1 text-sm border border-blue-300 rounded focus:outline-none focus:border-blue-500"
+                                                    autoFocus
+                                                    onBlur={() => setEditMode(null)}
+                                                />
+                                            </form>
                                         ) : (
-                                            <div className="w-full h-full flex items-center justify-center bg-gradient-to-br from-blue-50 to-blue-100">
-                                                <Camera className="w-7 h-7 text-blue-300" />
+                                            <div className="flex items-center justify-between">
+                                                <h3 className="text-sm font-semibold text-blue-900 mb-1.5 line-clamp-1">{event.name}</h3>
+                                                <button
+                                                    onClick={() => {
+                                                        setEditMode({ eventId: event.id, type: 'name' });
+                                                        setEditedName(event.name);
+                                                    }}
+                                                    className="p-1 text-gray-500 hover:text-blue-600 rounded-full hover:bg-blue-50"
+                                                >
+                                                    <Edit className="w-3 h-3" />
+                                                </button>
                                             </div>
                                         )}
-                                    </div>
-                                    <div className="p-2.5">
-                                        <h3 className="text-sm font-semibold text-blue-900 mb-1.5 line-clamp-1">{event.name}</h3>
                                         <div className="flex items-center mb-1.5 bg-blue-50 rounded-lg p-1">
                                             <span className="text-xs font-medium text-gray-600 mr-1">Code:</span>
                                             <div className="flex items-center flex-1">
