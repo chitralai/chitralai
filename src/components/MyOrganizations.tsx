@@ -1,6 +1,11 @@
 import React, { useState, useEffect, useContext } from 'react';
 import { Search, Building2, AlertCircle } from 'lucide-react';
-import { queryUserByOrganizationCode, storeAttendeeOrg, getAttendeeOrganizations } from '../config/dynamodb';
+import { 
+  queryUserByOrganizationCode, 
+  storeAttendeeOrg, 
+  getAttendeeOrganizations,
+  deleteAttendeeOrg // Add this import
+} from '../config/dynamodb';
 import { UserContext } from '../App';
 import OrganizationEvents from './OrganizationEvents';
 
@@ -86,6 +91,24 @@ const MyOrganizations: React.FC = () => {
       setOrganizationId(''); // Clear the input
     } catch (error: any) {
       setError(error.message || 'Failed to add organization');
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  const handleDelete = async (organizationCode: string) => {
+    if (!userEmail) return;
+    
+    setLoading(true);
+    try {
+      // Delete from DynamoDB
+      await deleteAttendeeOrg(userEmail, organizationCode);
+      
+      // Update local state
+      setOrganizations(prev => prev.filter(org => org.organizationCode !== organizationCode));
+    } catch (error) {
+      console.error('Error deleting organization:', error);
+      setError('Failed to delete organization');
     } finally {
       setLoading(false);
     }
@@ -211,7 +234,9 @@ const MyOrganizations: React.FC = () => {
                         View Events
                       </button>
                       <button
-                        className="px-4 py-2 text-sm bg-red-50 text-black-600 rounded-md hover:bg-red-100 transition-colors"
+                        onClick={() => handleDelete(org.organizationCode)}
+                        disabled={loading}
+                        className="px-4 py-2 text-sm bg-red-50 text-red-600 rounded-md hover:bg-red-100 transition-colors disabled:opacity-50"
                       >
                         Delete
                       </button>
