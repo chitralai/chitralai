@@ -8,6 +8,8 @@ export const ATTENDEE_IMGS_TABLE = 'Attendee-imgs';
 export interface AttendeeImageData {
   userId: string;
   eventId: string;
+  eventName?: string;
+  coverImage?: string;
   selfieURL: string;
   matchedImages: string[];
   uploadedAt: string;
@@ -37,11 +39,13 @@ export const storeAttendeeImageData = async (data: AttendeeImageData): Promise<b
           userId: data.userId,
           eventId: data.eventId
         },
-        UpdateExpression: 'SET selfieURL = :selfieURL, matchedImages = :matchedImages, lastUpdated = :lastUpdated',
+        UpdateExpression: 'SET selfieURL = :selfieURL, matchedImages = :matchedImages, lastUpdated = :lastUpdated, eventName = :eventName, coverImage = :coverImage',
         ExpressionAttributeValues: {
           ':selfieURL': data.selfieURL,
           ':matchedImages': Array.from(allMatchedImages),
-          ':lastUpdated': new Date().toISOString()
+          ':lastUpdated': new Date().toISOString(),
+          ':eventName': data.eventName || existingData.eventName,
+          ':coverImage': data.coverImage || existingData.coverImage
         }
       });
       
@@ -55,6 +59,8 @@ export const storeAttendeeImageData = async (data: AttendeeImageData): Promise<b
       Item: {
         userId: data.userId,
         eventId: data.eventId,
+        eventName: data.eventName,
+        coverImage: data.coverImage,
         selfieURL: data.selfieURL,
         matchedImages: data.matchedImages,
         uploadedAt: data.uploadedAt,
@@ -282,6 +288,8 @@ export const storeUserDefaultSelfie = async (userId: string, selfieURL: string):
       Item: {
         userId: userId,
         eventId: 'default',
+        eventName: 'Default Profile',
+        coverImage: null,
         selfieURL: selfieURL,
         matchedImages: [],
         uploadedAt: new Date().toISOString(),
