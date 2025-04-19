@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { useNavigate, useLocation } from 'react-router-dom';
-import { Camera, Calendar, Image as ImageIcon, ArrowRight, X, Search, Download, Share2, Facebook, Instagram, Twitter, Linkedin, MessageCircle, Mail, Link } from 'lucide-react';
+import { Camera, Calendar, Image as ImageIcon, X, Search, Download, Share2, Facebook, Instagram, Twitter, Linkedin, MessageCircle, Mail, Link } from 'lucide-react';
 import { ListObjectsV2Command } from '@aws-sdk/client-s3';
 import { Upload } from '@aws-sdk/lib-storage';
 import { S3_BUCKET_NAME, s3Client, rekognitionClient } from '../config/aws';
@@ -63,6 +63,7 @@ const AttendeeDashboard: React.FC<AttendeeDashboardProps> = ({ setShowSignInModa
   const [processingStatus, setProcessingStatus] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [eventSortOption, setEventSortOption] = useState<'date' | 'name'>('date');
   
   // New state variables for camera functionality
   const [isCameraActive, setIsCameraActive] = useState(false);
@@ -978,10 +979,7 @@ const AttendeeDashboard: React.FC<AttendeeDashboardProps> = ({ setShowSignInModa
   }, []);
 
   // Modify the handleSelfieChange to use handleUpdateSelfie instead
-  const handleSelfieChange = (e: React.ChangeEvent<HTMLInputElement>) => {
-    // Instead of handling the file directly, trigger the update selfie flow
-    handleUpdateSelfie();
-  };
+ 
 
   // Clear selfie selection
   const clearSelfie = () => {
@@ -1149,7 +1147,9 @@ const AttendeeDashboard: React.FC<AttendeeDashboardProps> = ({ setShowSignInModa
 
   const handleDownload = async (url: string) => {
     try {
-      const userEmail = localStorage.getItem('userEmail') || '';
+// Get user email and use it for download tracking
+const userEmail = localStorage.getItem('userEmail') || '';
+console.log(`User ${userEmail} downloading image`);
       const response = await fetch(url, {
         headers: {
           'Cache-Control': 'no-cache',
@@ -1514,67 +1514,60 @@ const AttendeeDashboard: React.FC<AttendeeDashboardProps> = ({ setShowSignInModa
 
         {/* Attended Events Section */}
         <div className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-8">
-          <h2 className="text-lg sm:text-xl font-semibold text-gray-900 mb-3 sm:mb-4">Your Event Albums</h2>
-          {attendedEvents.length === 0 ? (
-            <div className="bg-gray-50 rounded-lg p-4 sm:p-6 text-center">
-              <Calendar className="h-10 sm:h-12 w-10 sm:w-12 text-gray-400 mx-auto mb-2" />
-              <p className="text-gray-600">You haven't attended any events yet.</p>
-              <p className="text-gray-500 text-sm mt-2">Enter an event code above to find your photos from an event.</p>
-            </div>
-          ) : (
-            <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
-              {attendedEvents
-                .filter(event => event.eventId !== 'default')
-                .map((event) => (
-                <div
-                  key={event.eventId}
-                  className="group bg-white rounded-lg border border-gray-200 overflow-hidden hover:shadow-lg transition-all duration-300 cursor-pointer transform hover:-translate-y-1"
-                  onClick={() => handleEventClick(event.eventId)}
-                >
-                  {/* Cover Image Container with Fixed Height */}
-                  <div className="relative h-40 sm:h-48 w-full overflow-hidden">
-                    <img
-                      src={event.coverImage || event.thumbnailUrl}
-                      alt={event.eventName}
-                      className="absolute inset-0 w-full h-full object-cover transform group-hover:scale-105 transition-transform duration-300"
-                    />
-                    <div className="absolute inset-0 bg-gradient-to-t from-black/60 to-transparent opacity-0 group-hover:opacity-100 transition-opacity duration-300" />
-                  </div>
+  <div className="flex justify-between items-center mb-4">
+    <h2 className="text-lg sm:text-xl font-semibold text-gray-900">Your Event Albums</h2>
+    <select
+      value={eventSortOption}
+      onChange={(e) => setEventSortOption(e.target.value as 'date' | 'name')}
+      className="px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+    >
+      <option value="date">Latest First</option>
+      <option value="name">Name A-Z</option>
+    </select>
+  </div>
 
-                  {/* Event Details Container */}
-                  <div className="p-3 sm:p-4">
-                    <h3 className="text-sm sm:text-base font-semibold text-gray-900 mb-1 line-clamp-2">
-                      {event.eventName}
-                    </h3>
-                    <div className="flex flex-col space-y-2">
-                      <p className="text-xs sm:text-sm text-gray-600 flex items-center">
-                        <Calendar className="w-3 sm:w-4 h-3 sm:h-4 mr-1 sm:mr-1.5" />
-                        {new Date(event.eventDate).toLocaleDateString(undefined, {
-                          year: 'numeric',
-                          month: 'short',
-                          day: 'numeric'
-                        })}
-                      </p>
-                      
-                      {/* View Photos Button */}
-                      <button
-                        onClick={(e) => {
-                          e.stopPropagation();
-                          handleEventClick(event.eventId);
-                        }}
-                        className="w-full mt-1 sm:mt-2 px-3 sm:px-4 py-1.5 sm:py-2 bg-blue-600 text-white rounded-lg hover:bg-blue-700 transition-colors flex items-center justify-center group-hover:bg-blue-700"
-                      >
-                        <ImageIcon className="w-3 sm:w-4 h-3 sm:h-4 mr-1 sm:mr-2" />
-                        <span className="text-xs sm:text-sm font-medium">View Photos</span>
-                        <ArrowRight className="w-3 sm:w-4 h-3 sm:h-4 ml-1 sm:ml-2 transform group-hover:translate-x-1 transition-transform" />
-                      </button>
-                    </div>
-                  </div>
-                </div>
-              ))}
+  {attendedEvents.length === 0 ? (
+    <div className="bg-gray-50 rounded-lg p-4 sm:p-6 text-center">
+      <Calendar className="h-10 sm:h-12 w-10 sm:w-12 text-gray-400 mx-auto mb-2" />
+      <p className="text-gray-600">You haven't attended any events yet.</p>
+      <p className="text-gray-500 text-sm mt-2">Enter an event code above to find your photos from an event.</p>
+    </div>
+  ) : (
+    <div className="grid grid-cols-1 sm:grid-cols-2 md:grid-cols-3 lg:grid-cols-4 xl:grid-cols-5 gap-3 sm:gap-4">
+      {attendedEvents
+        .filter(event => event.eventId !== 'default')
+        .sort((a, b) => {
+          if (eventSortOption === 'date') {
+            return new Date(b.eventDate).getTime() - new Date(a.eventDate).getTime();
+          } else {
+            return a.eventName.localeCompare(b.eventName);
+          }
+        })
+        .map((event) => (
+          // ... existing event card code ...
+          <div
+            key={event.eventId}
+            className="bg-white rounded-lg shadow-sm overflow-hidden hover:shadow-md transition-shadow border border-gray-200 cursor-pointer"
+            onClick={() => handleEventClick(event.eventId)}
+          >
+            <div className="aspect-square relative">
+              <img
+                src={event.thumbnailUrl || event.coverImage}
+                alt={`${event.eventName} thumbnail`}
+                className="object-cover w-full h-full"
+              />
+              <div className="absolute inset-x-0 bottom-0 bg-gradient-to-t from-black/70 to-transparent p-3">
+                <h3 className="text-white font-semibold truncate">{event.eventName}</h3>
+                <p className="text-white/80 text-sm">
+                  {new Date(event.eventDate).toLocaleDateString()}
+                </p>
+              </div>
             </div>
-          )}
-        </div>
+          </div>
+        ))}
+    </div>
+  )}
+</div>
 
         {/* Matching Images Section */}
         <div ref={matchedImagesRef} className="bg-white rounded-lg shadow-sm p-4 sm:p-6 mb-8">
