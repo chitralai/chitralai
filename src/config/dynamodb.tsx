@@ -1,5 +1,14 @@
 import { DynamoDBClient } from '@aws-sdk/client-dynamodb';
-import { DynamoDBDocumentClient, PutCommand, GetCommand, QueryCommand, ScanCommand, UpdateCommand } from '@aws-sdk/lib-dynamodb';
+import { 
+  DynamoDBDocumentClient, 
+  PutCommand, 
+  GetCommand, 
+  QueryCommand, 
+  ScanCommand, 
+  UpdateCommand,
+  DeleteCommand // Add this import
+} from '@aws-sdk/lib-dynamodb';
+
 
 const region = import.meta.env.VITE_AWS_REGION;
 const accessKeyId = import.meta.env.VITE_AWS_ACCESS_KEY_ID;
@@ -446,5 +455,23 @@ export const getEventsViaUserByOrgCode = async (organizationCode: string) => {
   } catch (error) {
     console.error('Error getting events via user by organization code:', error);
     return [];
+  }
+};
+
+export const deleteAttendeeOrg = async (userId: string, organizationCode: string) => {
+  try {
+    const command = new DeleteCommand({
+      TableName: ATTENDEE_ORG_TABLE,
+      Key: {
+        userId: userId,
+        organizationCode: organizationCode
+      }
+    });
+
+    await docClient.send(command);
+    return true;
+  } catch (error) {
+    console.error('Error deleting attendee-org relationship:', error);
+    throw error;
   }
 };
