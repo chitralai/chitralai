@@ -313,6 +313,8 @@ export const getEventsByOrganizationCode = async (organizationCode: string) => {
 export const storeAttendeeImageData = async (data: {
   userId: string;
   eventId: string;
+  eventName?: string;
+  coverImage?: string;
   selfieURL: string;
   matchedImages: string[];
   uploadedAt: string;
@@ -324,6 +326,8 @@ export const storeAttendeeImageData = async (data: {
       Item: {
         userId: data.userId,
         eventId: data.eventId,
+        eventName: data.eventName,
+        coverImage: data.coverImage,
         selfieURL: data.selfieURL,
         matchedImages: data.matchedImages,
         uploadedAt: data.uploadedAt,
@@ -383,6 +387,8 @@ export const getMatchedImages = async (userId: string, eventId: string) => {
       return {
         matchedImages: item.matchedImages,
         selfieURL: item.selfieURL,
+        eventName: item.eventName,
+        coverImage: item.coverImage,
         uploadedAt: item.uploadedAt,
         lastUpdated: item.lastUpdated
       };
