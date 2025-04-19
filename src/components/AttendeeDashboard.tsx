@@ -242,10 +242,11 @@ const AttendeeDashboard: React.FC<AttendeeDashboardProps> = ({ setShowSignInModa
     if (!eventExists) {
       const newEvent: Event = {
         eventId: event.id,
-        eventName: event.name,
+        eventName: existingData.eventName || event.name,
         eventDate: event.date,
-        thumbnailUrl: event.coverImage || existingData.matchedImages[0] || '',
-        coverImage: event.coverImage || ''
+        // Use coverImage from attendee data if available, then event's coverImage, then fall back to first matched image
+        thumbnailUrl: existingData.coverImage || event.coverImage || existingData.matchedImages[0] || '',
+        coverImage: existingData.coverImage || event.coverImage || ''
       };
       setAttendedEvents(prev => [newEvent, ...prev]);
     }
@@ -254,7 +255,7 @@ const AttendeeDashboard: React.FC<AttendeeDashboardProps> = ({ setShowSignInModa
     const newImages: MatchingImage[] = existingData.matchedImages.map((url: string) => ({
       imageId: url.split('/').pop() || '',
       eventId: event.id,
-      eventName: event.name,
+      eventName: existingData.eventName || event.name,
       imageUrl: url,
       matchedDate: existingData.uploadedAt
     }));
@@ -334,7 +335,7 @@ const AttendeeDashboard: React.FC<AttendeeDashboardProps> = ({ setShowSignInModa
               if (data.eventId === 'default') continue;
               
               // Default event name and date if details not found
-              const eventName = eventDetails?.name || `Event ${data.eventId}`;
+              const eventName = data.eventName || eventDetails?.name || `Event ${data.eventId}`;
               const eventDate = eventDetails?.date || data.uploadedAt;
               
               // Add to events list if not already added
@@ -343,9 +344,9 @@ const AttendeeDashboard: React.FC<AttendeeDashboardProps> = ({ setShowSignInModa
                   eventId: data.eventId,
                   eventName: eventName,
                   eventDate: eventDate,
-                  // Use event's coverImage if available, otherwise fall back to first matched image
-                  thumbnailUrl: eventDetails?.coverImage || data.matchedImages[0] || '',
-                  coverImage: eventDetails?.coverImage || ''
+                  // Use coverImage from attendee data if available, then event's coverImage, then fall back to first matched image
+                  thumbnailUrl: data.coverImage || eventDetails?.coverImage || data.matchedImages[0] || '',
+                  coverImage: data.coverImage || eventDetails?.coverImage || ''
                 });
               }
               
@@ -492,11 +493,11 @@ const AttendeeDashboard: React.FC<AttendeeDashboardProps> = ({ setShowSignInModa
         if (!eventExists) {
           const newEvent: Event = {
             eventId: event.id,
-            eventName: event.name,
+            eventName: existingData.eventName || event.name,
             eventDate: event.date,
-            // Use event's coverImage if available, otherwise fall back to first matched image
-            thumbnailUrl: event.coverImage || existingData.matchedImages[0] || '',
-            coverImage: event.coverImage || ''
+            // Use coverImage from attendee data if available, then event's coverImage, then fall back to first matched image
+            thumbnailUrl: existingData.coverImage || event.coverImage || existingData.matchedImages[0] || '',
+            coverImage: existingData.coverImage || event.coverImage || ''
           };
           setAttendedEvents(prev => [newEvent, ...prev]);
         }
@@ -505,7 +506,7 @@ const AttendeeDashboard: React.FC<AttendeeDashboardProps> = ({ setShowSignInModa
         const newImages: MatchingImage[] = existingData.matchedImages.map((url: string) => ({
           imageId: url.split('/').pop() || '',
           eventId: event.id,
-          eventName: event.name,
+          eventName: existingData.eventName || event.name,
           imageUrl: url,
           matchedDate: existingData.uploadedAt
         }));
@@ -726,6 +727,7 @@ const AttendeeDashboard: React.FC<AttendeeDashboardProps> = ({ setShowSignInModa
           eventId: event.id,
           eventName: event.name,
           eventDate: event.date,
+          // Use coverImage from attendee data if available, then event's coverImage, then fall back to first matched image
           thumbnailUrl: event.coverImage || sortedMatches[0].url,
           coverImage: event.coverImage || ''
         };
@@ -740,6 +742,8 @@ const AttendeeDashboard: React.FC<AttendeeDashboardProps> = ({ setShowSignInModa
       const attendeeData = {
         userId: userEmail,
         eventId: event.id,
+        eventName: event.name,
+        coverImage: event.coverImage,
         selfieURL: existingSelfieUrl,
         matchedImages: matchedImageUrls,
         uploadedAt: currentTimestamp,
@@ -1107,6 +1111,8 @@ const AttendeeDashboard: React.FC<AttendeeDashboardProps> = ({ setShowSignInModa
         await storeAttendeeImageData({
           userId: userEmail,
           eventId: eventDetails.id,
+          eventName: eventDetails.name,
+          coverImage: completeEventDetails.coverImage,
           selfieURL: selfieUrl,
           matchedImages: matchingImages.map(img => img.imageUrl),
           uploadedAt: new Date().toISOString(),
