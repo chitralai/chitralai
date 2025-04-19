@@ -167,6 +167,8 @@ const OrganizationEvents: React.FC<OrganizationEventsProps> = ({
       await storeAttendeeImageData({
         userId: userEmail,
         eventId: event.id,
+        eventName: event.name,
+        coverImage: event.coverImage,
         selfieURL: selfieUrl,
         matchedImages: results.map(r => r.url),
         uploadedAt: new Date().toISOString(),
